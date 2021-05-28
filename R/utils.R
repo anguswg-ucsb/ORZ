@@ -1,3 +1,4 @@
+# make even clases from raster values
 get_classes <- function(rast, lvls){
   int <- seq(
     cellStats(rast, min),
@@ -13,7 +14,69 @@ get_classes <- function(rast, lvls){
   categories <- reclassify(rast, reclass_m, include.lowest = TRUE)
 }
 
+# checks geometry and adds character column of name
+detect_geometry <- function(string) {
+  is_polygon  <- stringr::str_detect(tolower(string), "polygon")
+  is_polyline <- stringr::str_detect(tolower(string), "polyline")
+  is_point    <- stringr::str_detect(tolower(string), "point")
+  ifelse(
+    is_polygon,
+    "POLYGON",
+    ifelse(
+      is_polyline,
+      "LINESTRING",
+      ifelse(
+        is_point,
+        "POINT",
+        NA
+      )
+    )
+  )
+}
 
+# Tidy layer geometries from LDWF API
+tidy_layer <- function(layer) {
+  initial_clean <-
+    layer %>%
+    dplyr::select(geometryType, features) %>%
+    tidyr::unpack(cols = c(tidyselect::everything(), -geometryType)) %>%
+    tidyr::unpack(cols = c(tidyselect::everything(), -geometryType)) %>%
+    dplyr::mutate(
+      geometryType = detect_geometry(geometryType)
+    ) %>%
+    dplyr::rename(
+      Name = tidyselect::contains("name")
+    )
+  geometry_column <-
+    initial_clean %>%
+    dplyr::select(tidyselect::last_col()) %>%
+    colnames()
+
+  final_clean <-
+    initial_clean %>%
+    dplyr::rename(
+      geometry = tidyselect::contains(geometry_column)
+    ) %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(
+      geometry = sf::st_sfc(sf::st_multipoint(geometry[,,]))
+    ) %>%
+    # dplyr::mutate(
+    #   geometry = dplyr::case_when(
+    #     geometryType == "POLYGON"    ~ sf::st_cast(geometry, "POLYGON"),
+    #     geometryType == "LINESTRING" ~ sf::st_cast(geometry, "LINESTRING"),
+    #     geometryType == "POINT" ~ sf::st_cast(geometry, "POINT")
+    #     # geometryType == "MULTIPOINT" ~ sf::st_cast(geometry, "MULTIPOINT"),
+    #   )
+    # ) %>%
+    dplyr::ungroup() %>%
+    sf::st_sf(
+      crs = "+proj=lcc +lat_1=29.3 +lat_2=30.7 +lat_0=28.5 +lon_0=-91.33333333333333 +x_0=1000000 +y_0=0 +datum=NAD83 +units=us-ft +no_defs"
+    ) %>%
+    sf::st_transform(4326) %>%
+    sf::st_as_sf() %>%
+    dplyr::select(-geometryType)
+}
 # This function downloads and prepares data based on user provided start and end dates
 OISST_sub_dl <- function(time_df){
   OISST_dat <- griddap(x = "hawaii_d90f_20ee_c4cb_LonPM180",

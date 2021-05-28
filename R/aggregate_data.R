@@ -28,6 +28,8 @@ convert("data/CRMS_Continuous_Hydrographic.csv", "data/CRMS_Continuous_Hydrograp
 
 crms <- arrow::read_parquet("data/crms_continuous_hydrographic.parquet")
 
+
+
 layers <- list()
 for (layer in (0L:17L)) {
   layer_name <- paste0("layer_", layer)
@@ -54,22 +56,43 @@ for (layer in (0L:17L)) {
     `[`(-which(names(.) == "spatialReference")) %>%
     tibble::as_tibble()
 }
-
+getwd()
 # desired shapefiles
-cultch <- layers$layer_10
-aoc <- layers$layer_6
-lhd <- layers$layer_2
-lhd_pending <- layers$layer_3
-pub_seedgr <- layers$layer_12
-oyst_lease <- layers$layer_14
+cultch <- tidy_layer(layers$layer_10) %>%
+  st_cast("POLYGON")
+# st_write(cultch, "data/shapefile/cultch_polygon.shp")
+
+aoc <- layers$layer_6[-3,] %>%
+  tidy_layer() %>%
+  st_cast("POLYGON")
+st_write(cultch, "data/shapefile/aoc_polygon.shp")
+
+pub_seedgr <- layers$layer_12 %>%
+  tidy_layer() %>%
+  st_cast("POLYGON")
+st_write(pub_seedgr, "data/shapefile/public_seed_grounds_polygon.shp")
+lhd <- layers$layer_2 %>%
+  tidy_layer() %>%
+  st_cast("POLYGON")
+lhd_pending <- layers$layer_3 %>%
+  tidy_layer() %>%
+  st_cast("POLYGON")
+oyst_lease <- layers$layer_14 %>%
+  tidy_layer() %>%
+  st_cast("POLYGON")
+
+# CPRA projects
+cpra_projects <- st_read("data/CPRA Projects.gdb")
+mapview(cpra_projects[1:5,])
+
 
 lst <- list()
-for (i in 1:nrow(cultch)) {
-  coords <- cultch$features[i,2] %>%
+for (i in 1:nrow(aoc)) {
+  coords <- aoc$features[i,2] %>%
     unlist()
-  names <- cultch$features[i,1]
-  lon = coords[1:5]
-  lat = coords[6:10]
+  names <- aoc$features[i,1]
+  lon = coords[1:4]
+  lat = coords[5:8]
 
   df <- data.frame(names = names, lon = lon, lat = lat) %>%
     st_as_sf(coords = c("lon", "lat"), crs = "+proj=lcc +lat_1=29.3 +lat_2=30.7 +lat_0=28.5 +lon_0=-91.33333333333333 +x_0=1000000 +y_0=0 +datum=NAD83 +units=us-ft +no_defs") %>%
@@ -85,7 +108,7 @@ for (i in 1:nrow(cultch)) {
 sf <- bind_rows(lst)
 
 # create bounding box to use to filter out extreme points
-bb <- sf$geometry[10] %>%
+bb <- sf$geometry[1] %>%
   st_transform(5070) %>%
   st_buffer(400000) %>%
   st_transform(4326) %>%
@@ -96,11 +119,11 @@ bb <- sf$geometry[10] %>%
 # filter out extreme points
 sf <- st_filter(sf, bb)
 
-# create a polygon from set of points for  each location
+# create a polygon from set of points for each location
 polys = st_sf(
   aggregate(
     sf$geometry,
-    list(sf$LOCATION),
+    list(sf$NAME),
     function(g){
       st_cast(st_union(g),"POLYGON")
     }
