@@ -1,5 +1,5 @@
 
-# Oyster Resource zones data aggregation & cleaning
+# Oyster Resource zones data aggregation & cleaning using LDWF API behind online Oyster map
 # Lynker
 # Angus Watters
 # 05/17/2021
@@ -15,7 +15,7 @@ library(RMariaDB)
 library(rio)
 library(arrow)
 
-# MySQL connection
+# CRMS CSV file, that I convert to a parquet to save space
 crms <- readr::read_csv("data/CRMS_Continuous_Hydrographic.csv",
                 progress = TRUE) %>%
   janitor::clean_names() %>% # snake_case the column headers
@@ -29,7 +29,7 @@ convert("data/CRMS_Continuous_Hydrographic.csv", "data/CRMS_Continuous_Hydrograp
 crms <- arrow::read_parquet("data/crms_continuous_hydrographic.parquet")
 
 
-
+# API calls to LDWF API
 layers <- list()
 for (layer in (0L:17L)) {
   layer_name <- paste0("layer_", layer)
